@@ -55,7 +55,8 @@ import os
 import argparse
 import random
 import gym
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import numpy as np
 import imageio
 from skimage.transform import resize
@@ -586,7 +587,7 @@ if __name__ == '__main__':
     parser.add_argument("--version", default = 4, type = int, help="Version")
     parser.add_argument("--frameskip", default = 1, type = int, help="frameskip value")
     parser.add_argument("--train", action='store_true', help='Train vs Test')
-    parser.add_argument("--save", action='store_true', help='Save Models and Results')
+    parser.add_argument("--save", action='store_true', help='Train vs Test')
     parser.add_argument("--eval_steps", type = int, help="Number of evaluation steps")
     parser.add_argument("--netw_update_freq", type = int, help="Frequency of swapping main and target network")
     parser.add_argument("--update_freq", type = int, help="Number of actions before gradient descent")
@@ -646,7 +647,7 @@ if __name__ == '__main__':
     if args.path:
         PATH = args.path+f'/{GAME}-{FRAME_SKIP}'
     else:
-    PATH      = f'/home/karan1agarwalla/DQN/{GAME}-{FRAME_SKIP}' # Gifs and checkpoints will be saved here
+        PATH      = f'/content/drive/MyDrive/DQN-Train/{GAME}-{FRAME_SKIP}' # Gifs and checkpoints will be saved here
     SUMMARIES = 'summaries'                # logdir for tensorboard
     RUNID     = 1
     while os.path.exists(PATH + '/run_' + str(RUNID)):

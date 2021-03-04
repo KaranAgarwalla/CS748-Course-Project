@@ -6,7 +6,6 @@
 
 #CONSTANTS
 TRAIN           = None           # Boolean value indicating whether the model is to be trained or tested
-SAVE            = None           # Boolean value indicating whether models and results need to be saved
 GAME            = None           # Name of game
 ENV_NAME        = None           # Name of the environment in ALE
 ENV_FRAME_SHAPE = [210, 160, 3]  # Shape of frames in the environment
@@ -380,10 +379,10 @@ class TargetNetworkUpdater(object):
         for copy_op in update_ops:
             sess.run(copy_op)
 
-def generate_gif(frame_number, frames_for_gif, reward, path):
+def generate_gif(time_step, frames_for_gif, reward, path):
     """
         Args:
-            frame_number: Integer, determining the number of the current frame
+            time_step: Integer, determining the number of the current time_step
             frames_for_gif: A sequence of (210, 160, 3) frames of an Atari game in RGB
             reward: Integer, Total reward of the episode that es ouputted as a gif
             path: String, path where gif is saved
@@ -392,7 +391,7 @@ def generate_gif(frame_number, frames_for_gif, reward, path):
         frames_for_gif[idx] = resize(frame_idx, (420, 320, 3), 
                                      preserve_range=True, order=0).astype(np.uint8)
         
-    imageio.mimsave(f'{path}/ATARI_frame_{frame_number}_reward_{reward}.gif', 
+    imageio.mimsave(f'{path}/ATARI_frame_{GAME}_{time_step}_reward_{reward}.gif', 
                     frames_for_gif, duration=1/30)
 
 class Atari(object):
@@ -450,134 +449,45 @@ class Atari(object):
 def clip_reward(reward):
     return np.sign(reward)  
 
-def train():
-    """Contains the training and evaluation loops"""
-    my_replay_memory = ReplayMemory(size=MEMORY_SIZE, batch_size=BS)   # (★)
-    update_networks = TargetNetworkUpdater(MAIN_DQN_VARS, TARGET_DQN_VARS)
-    
+def eval_model(frameskip, time_step, meta_graph_path, checkpoint_path):
+    '''
+        frameskip: frameskip parameter
+        meta_graph_path: path to meta-file (e.g.: '/home/DQN/Enduro-20/run_1/my_model-30000000.meta')
+        checkpoint_path: path to checkpoint-file (e.g.: '/home/DQN/Enduro-20/run_1/my_model-30000000') 
+    '''
+    gif_path = "/home/karan1agarwalla/GIF/"
+    os.makedirs(gif_path, exist_ok=True)
+
     explore_exploit_sched = ExplorationExploitationScheduler(
         MAIN_DQN, atari.env.action_space.n, 
         replay_memory_start_size=REPLAY_MEMORY_START_SIZE, 
         max_steps=MAX_STEPS)
-
-    reward_per_01 = PATH + '/rewards_every_episode.dat'
-    reward_per_10 = PATH + '/rewards_every_10_episodes.dat'
-    reward_eval_01= PATH + '/rewards_eval_every_episodes.dat'
-    reward_eval   = PATH + '/rewards_eval.dat'
+    
     with tf.Session(config=config) as sess:
-        sess.run(init)
+
+        ### Restore Model
+        saver = tf.train.import_meta_graph(meta_graph_path)
+        saver.restore(sess, checkpoint_path)
+
+        frames_for_gif = []
+        terminal_life_lost = atari.reset(sess, evaluation = True)
+        episode_reward_sum = 0
+        while len(frames_for_gif) < EVAL_STEPS:
+            # atari.env.render()
+            action = 1 if terminal_life_lost else explore_exploit_sched.get_action(sess, 0, atari.state,  
+                                                                                evaluation = True)
+            
+            processed_new_frame, reward, terminal, terminal_life_lost, new_frame = atari.step(sess, action)
+            episode_reward_sum += reward
+            frames_for_gif.append(new_frame)
+            if terminal == True:
+                break
         
-        time_step = 0
-        episode_number = 0
-        frame_number = 0
-        rewards = []
-        loss_list = []
-        
-        while time_step < MAX_STEPS:
-            
-            ########################
-            ####### Training #######
-            ########################
-
-            epoch_steps = 0
-            while epoch_steps < EVAL_FREQUENCY:
-                terminal_life_lost = atari.reset(sess)
-                episode_reward_sum = 0
-                episode_iter = 0
-                while episode_iter < MAX_EPISODE_LENGTH:
-                    episode_iter += FRAME_SKIP # (4★)
-                    action = explore_exploit_sched.get_action(sess, time_step, atari.state) # (5★)
-                    processed_new_frame, reward, terminal, terminal_life_lost, _ = atari.step(sess, action)  
-                    time_step += FRAME_SKIP
-                    frame_number += 1
-                    epoch_steps += FRAME_SKIP
-                    episode_reward_sum += reward
-                    
-                    # Clip the reward
-                    clipped_reward = clip_reward(reward)
-                    
-                    # (7★) Store transition in the replay memory
-                    my_replay_memory.add_experience(action=action, 
-                                                    frame=processed_new_frame[:, :, 0],
-                                                    reward=clipped_reward, 
-                                                    terminal=terminal_life_lost)   
-                    
-                    ## Perform Gradient Descent
-                    if time_step % UPDATE_FREQ == 0 and time_step > REPLAY_MEMORY_START_SIZE:
-                        loss = learn(sess, my_replay_memory, MAIN_DQN, TARGET_DQN,
-                                     BS, gamma = DISCOUNT_FACTOR) # (8★)
-                        loss_list.append(loss)
-
-                    ## Update the Target Network
-                    if time_step % NETW_UPDATE_FREQ == 0 and time_step > REPLAY_MEMORY_START_SIZE:
-                        update_networks(sess) # (9★)
-                    
-                    ## Save the network parameters
-                    if time_step % SAVE_FREQUENCY == 0:
-                        saver.save(sess, PATH+'/my_model', global_step=time_step)
-        
-                    if terminal:
-                        terminal = False
-                        break
-
-                episode_number += 1
-                rewards.append(episode_reward_sum)
-                
-                with open(reward_per_01, 'a') as f:
-                    print(len(rewards), time_step, frame_number, episode_number, episode_reward_sum, file = f)
-                
-                # Output the progress:
-                if len(rewards) % 10 == 0:
-                    print(len(rewards), time_step, np.mean(rewards[-100:]))
-                    with open(reward_per_10, 'a') as f:
-                        print(len(rewards), time_step, frame_number, episode_number,
-                            np.mean(rewards[-10:]), file=f)
-            
-            ########################
-            ###### Evaluation ######
-            ########################
-            terminal = True
-            gif = True
-            frames_for_gif = []
-            eval_rewards = []
-            evaluate_frame_number = 0
-            
-            for _ in range(EVAL_STEPS):
-                if terminal:
-                    terminal_life_lost = atari.reset(sess, evaluation=True)
-                    episode_reward_sum = 0
-                    terminal = False
-               
-                # Fire (action 1), when a life was lost or the game just started, 
-                # so that the agent does not stand around doing nothing. When playing 
-                # with other environments, you might want to change this...
-                action = 1 if terminal_life_lost else explore_exploit_sched.get_action(sess, time_step,
-                                                                                       atari.state, 
-                                                                                       evaluation=True)
-                
-                processed_new_frame, reward, terminal, terminal_life_lost, new_frame = atari.step(sess, action) ### A seperate Atari
-                evaluate_frame_number += 1
-                episode_reward_sum += reward
-
-                if gif: 
-                    frames_for_gif.append(new_frame)
-                if terminal:
-                    with open(reward_eval_01, 'a') as f:
-                        print(time_step, frame_number, episode_number, episode_reward_sum, file = f)
-                    gif = False # Save only the first game of the evaluation as a gif
-                    break
-            
-            ## Append the rewards
-            eval_rewards.append(episode_reward_sum)
-            print("Evaluation score:\n", np.mean(eval_rewards))       
-            try:
-                generate_gif(frame_number, frames_for_gif, eval_rewards[0], PATH)
-            except IndexError:
-                print("No evaluation game finished")
-            
-            frames_for_gif = []
-            with open(reward_eval, 'a') as f:
-                print(time_step, frame_number, episode_number, np.mean(eval_rewards), file=reward_eval)
+        # atari.env.close()
+        print("The total reward is {}".format(episode_reward_sum))
+        print("Creating gif...")
+        generate_gif(time_step, frames_for_gif, episode_reward_sum, gif_path)
+        print(f'Gif created, check the folder /home/karan1agarwalla/GIFS/{GAME}_{FRAME_SKIP}_{time_step}')
 
 if __name__ == '__main__':
     # Setup Parser
@@ -586,27 +496,19 @@ if __name__ == '__main__':
     parser.add_argument("--version", default = 4, type = int, help="Version")
     parser.add_argument("--frameskip", default = 1, type = int, help="frameskip value")
     parser.add_argument("--train", action='store_true', help='Train vs Test')
-    parser.add_argument("--save", action='store_true', help='Save Models and Results')
-    parser.add_argument("--eval_steps", type = int, help="Number of evaluation steps")
-    parser.add_argument("--netw_update_freq", type = int, help="Frequency of swapping main and target network")
-    parser.add_argument("--update_freq", type = int, help="Number of actions before gradient descent")
-    parser.add_argument("--replay_memory_size", type = int, help="Size of replay memory: Default 0.5 million")
-    parser.add_argument("--max_steps", type = int, help="Total number of frames an agent sees")
-    parser.add_argument("--path", help="Path to store models and values: PATH/'GAME'-'FRAMESKIP'/run_'RUN_ID'/")
-    parser.add_argument("--warnings", action='store_false', help='Display Deprecated Warnings')
+    parser.add_argument("--path", required = True, help="Path to folder containing the models")
+    parser.add_argument("--time_step", required = True, type = int, help="TIME_STEP corresponding to model")
+    parser.add_argument("--warnings", action='store_false', help='Suppress Deprecated Warnings')
     
+    tf.reset_default_graph()
     args = parser.parse_args()
     if args.warnings:
         warnings.filterwarnings("ignore", category=DeprecationWarning)
-        tf.logging.set_verbosity(tf.logging.ERROR)
-
-    tf.reset_default_graph()
     
     GAME        = args.game
     ENV_NAME    = f'{args.game}Deterministic-v{args.version}'
     FRAME_SKIP  = args.frameskip
     TRAIN       = args.train
-    SAVE        = args.save
     atari       = Atari(ENV_NAME, no_op_steps=NO_OP_STEPS, frameskip=FRAME_SKIP)
         
     # main DQN and target DQN networks:
@@ -622,40 +524,10 @@ if __name__ == '__main__':
     TARGET_DQN_VARS = tf.trainable_variables(scope='targetDQN')
 
     # update frequencies of the target and main networks
-    if args.netw_update_freq:
-        NETW_UPDATE_FREQ = args.netw_update_freq
-    else:
-        NETW_UPDATE_FREQ = min(10000*FRAME_SKIP, 160000)
+    NETW_UPDATE_FREQ = min(10000*FRAME_SKIP, 160000)
+    UPDATE_FREQ = max(FRAME_SKIP, 16)
+    EVAL_STEPS  = int(MAX_EPISODE_LENGTH/FRAME_SKIP)
     
-    if args.update_freq:
-        UPDATE_FREQ = args.update_freq
-    else:
-        UPDATE_FREQ = max(FRAME_SKIP, 16)
-    
-    if args.eval_steps:
-        EVAL_STEPS = arga.eval_steps
-    else:
-        EVAL_STEPS  = int(MAX_EPISODE_LENGTH/FRAME_SKIP)
-
-    if args.replay_memory_size:
-        MEMORY_SIZE = args.replay_memory_size
-
-    if args.max_steps:
-        MAX_STEPS = args.max_steps
-
-    if args.path:
-        PATH = args.path+f'/{GAME}-{FRAME_SKIP}'
-    else:
-    PATH      = f'/home/karan1agarwalla/DQN/{GAME}-{FRAME_SKIP}' # Gifs and checkpoints will be saved here
-    SUMMARIES = 'summaries'                # logdir for tensorboard
-    RUNID     = 1
-    while os.path.exists(PATH + '/run_' + str(RUNID)):
-        RUNID += 1
-    RUNID     = '/run_' + str(RUNID)
-    PATH      = PATH + RUNID
-    SUMMARIES = PATH + '/' + SUMMARIES
-    os.makedirs(SUMMARIES, exist_ok=True)
-    print(f'The env {ENV_NAME} has the following {atari.env.action_space.n} \
-    actions: {atari.env.unwrapped.get_action_meanings()}')
-    if TRAIN:
-        train()    
+    META_PATH   = args.path + f'/my_model-{args.time_step}.meta'
+    CHECKPOINT  = args.path + f'/my_model-{args.time_step}'
+    eval_model(FRAME_SKIP, args.time_step, META_PATH, CHECKPOINT)
