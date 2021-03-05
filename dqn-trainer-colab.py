@@ -730,7 +730,7 @@ if __name__ == '__main__':
 
     MEMORY_SIZE = args.memory_size
     MAX_STEPS   = args.max_steps
-    
+    TRAIN_STEPS = args.train_steps
     if args.train:
         ### Need to save and load the model
         if args.path:
