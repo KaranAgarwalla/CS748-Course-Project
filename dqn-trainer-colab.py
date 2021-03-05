@@ -5,8 +5,10 @@
 #Train a DQN Agent to play a specific game
 
 #CONSTANTS
-TRAIN           = None           # Boolean value indicating whether the model is to be trained or tested
-SAVE            = None           # Boolean value indicating whether models and results need to be saved
+TRAIN           = None           # Boolean value indicating whether the model is to be trained or evaluated
+SAVE            = None           # Boolean value indicating whether model needs to be saved 
+LOAD            = None           # Boolean value indicating whether model needs to be saved for further training
+
 GAME            = None           # Name of game
 ENV_NAME        = None           # Name of the environment in ALE
 ENV_FRAME_SHAPE = [210, 160, 3]  # Shape of frames in the environment
@@ -52,17 +54,19 @@ PATH            = None
 SUMMARIES       = None
 RUNID           = None
 
+### Suppress warnings and tensorflow debug info
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import warnings
+warnings.filterwarnings("ignore")
 import argparse
 import random
 import gym
 import tensorflow.compat.v1 as tf
-tf.logging.set_verbosity(tf.logging.ERROR)
 tf.disable_v2_behavior()
 import numpy as np
 import imageio
 from skimage.transform import resize
-import warnings
 import pickle
 
 config = tf.ConfigProto()
@@ -320,18 +324,21 @@ class ReplayMemory(object):
         
         return np.transpose(self.states, axes=(0, 2, 3, 1)), self.actions[self.indices], self.rewards[self.indices], np.transpose(self.new_states, axes=(0, 2, 3, 1)), self.terminal_flags[self.indices]
     
-    def load(self, path):
+    def load_replay(self, path):
         """
             Loads the Replay Memory State Variables from path
         """
-        self.count          = pickle.load(open(PATH+'replay_count.p'), 'rb')
-        self.current        = pickle.load(open(PATH+'replay_current.p'), 'rb')
-        self.actions        = np.load(PATH+'replay_actions.npy')
-        self.rewards        = np.load(PATH+'replay_rewards.npy')
-        self.frames         = np.load(PATH+'replay_frames.npy')
-        self.terminal_flags = np.load(PATH+'replay_terminal_flags.npy')
-    
-    def save(self, path):
+        try:
+            self.count          = pickle.load(open(PATH+'replay_count.p'), 'rb')
+            self.current        = pickle.load(open(PATH+'replay_current.p'), 'rb')
+            self.actions        = np.load(PATH+'replay_actions.npy')
+            self.rewards        = np.load(PATH+'replay_rewards.npy')
+            self.frames         = np.load(PATH+'replay_frames.npy')
+            self.terminal_flags = np.load(PATH+'replay_terminal_flags.npy')
+        except:
+            raise FileNotFoundError("Files for Replay Memory State do not exist")
+        
+    def save_replay(self, path):
         """
             Saves the Replay Memory State Variables to path
         """
@@ -476,12 +483,12 @@ class Atari(object):
 def clip_reward(reward):
     return np.sign(reward)  
 
-def train(LOAD, PATH):
+def train():
     """Contains the training and evaluation loops"""
 
     my_replay_memory = ReplayMemory(size=MEMORY_SIZE, batch_size=BS)
     if LOAD:
-        my_replay_memory.load(PATH)
+        my_replay_memory.load_replay(PATH)
 
     update_networks = TargetNetworkUpdater(MAIN_DQN_VARS, TARGET_DQN_VARS)
     explore_exploit_sched = ExplorationExploitationScheduler(
@@ -515,6 +522,7 @@ def train(LOAD, PATH):
         
         if time_step >= TRAIN_STEPS:
             raise ValueError("Agent already trained upto this time_step")
+
         while time_step < TRAIN_STEPS:
             
             ########################
@@ -554,7 +562,7 @@ def train(LOAD, PATH):
                         update_networks(sess) # (9★)
                     
                     ## Save the network parameters
-                    if time_step % SAVE_FREQUENCY == 0:
+                    if SAVE and time_step % SAVE_FREQUENCY == 0:
                         saver.save(sess, PATH+'/my_model', global_step=time_step)
         
                     if terminal:
@@ -564,15 +572,17 @@ def train(LOAD, PATH):
                 episode_number += 1
                 rewards.append(episode_reward_sum)
                 
-                with open(reward_per_01, 'a') as f:
-                    print(len(rewards), time_step, frame_number, episode_number, episode_reward_sum, file = f)
+                if SAVE:
+                    with open(reward_per_01, 'a') as f:
+                        print(len(rewards), time_step, frame_number, episode_number, episode_reward_sum, file = f)
                 
                 # Output the progress:
                 if len(rewards) % 10 == 0:
                     print(len(rewards), time_step, np.mean(rewards[-100:]))
-                    with open(reward_per_10, 'a') as f:
-                        print(len(rewards), time_step, frame_number, episode_number,
-                            np.mean(rewards[-10:]), file=f)
+                    if SAVE:
+                        with open(reward_per_10, 'a') as f:
+                            print(len(rewards), time_step, frame_number, episode_number,
+                                np.mean(rewards[-10:]), file=f)
             
             ########################
             ###### Evaluation ######
@@ -602,33 +612,39 @@ def train(LOAD, PATH):
 
                 if gif: 
                     frames_for_gif.append(new_frame)
+
                 if terminal:
-                    with open(reward_eval_01, 'a') as f:
-                        print(time_step, frame_number, episode_number, episode_reward_sum, file = f)
+                    if SAVE:
+                        with open(reward_eval_01, 'a') as f:
+                            print(time_step, frame_number, episode_number, episode_reward_sum, file = f)
                     gif = False # Save only the first game of the evaluation as a gif
                     break
             
             ## Append the rewards
             eval_rewards.append(episode_reward_sum)
             print("Evaluation score:\n", np.mean(eval_rewards))       
-            try:
-                generate_gif(frame_number, frames_for_gif, eval_rewards[0], PATH)
-            except IndexError:
-                print("No evaluation game finished")
+
+            if SAVE:
+                try:
+                    generate_gif(frame_number, frames_for_gif, eval_rewards[0], PATH)
+                except IndexError:
+                    print("No evaluation game finished")
             
             frames_for_gif = []
-            with open(reward_eval, 'a') as f:
-                print(time_step, frame_number, episode_number, np.mean(eval_rewards), file=f)
+
+            if SAVE:
+                with open(reward_eval, 'a') as f:
+                    print(time_step, frame_number, episode_number, np.mean(eval_rewards), file=f)
         
-        if LOAD:
+        if SAVE:
             saver.save(sess, PATH+'/my_model', global_step=time_step)
             pickle.dump(time_step, open(PATH+'/train_time_step.p'), 'wb')
             pickle.dump(episode_number, open(PATH+'/train_episode_number.p'), 'wb')
             pickle.dump(frame_number, open(PATH+'/train_frame_number.p'), 'wb')
             pickle.dump(rewards, open(PATH+'/train_rewards.p'), 'wb')
     
-    if LOAD:
-        my_replay_memory.save(PATH)
+    if SAVE:
+        my_replay_memory.save_replay(PATH)
 
 def eval_model(frameskip, time_step, meta_graph_path, checkpoint_path):
     '''
@@ -672,19 +688,19 @@ def eval_model(frameskip, time_step, meta_graph_path, checkpoint_path):
 
 if __name__ == '__main__':
     # Setup Parser
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--game", default = "Pong", help="Name of Atari Game")
     parser.add_argument("--version", default = 4, type = int, help="Version")
     parser.add_argument("--frameskip", default = 1, type = int, help="frameskip value")
 
-    parser.add_argument("--train", action='store_true', help='Train vs Test')
+    parser.add_argument("--train", action='store_true', help='Train vs Evaluate')
     parser.add_argument("--save", action='store_true', help='Save Models and Results')
-    parser.add_argument("--load", action='store_true', help="Load Model in last run_id in PATH")
+    parser.add_argument("--load", action='store_true', help="Load Model in last RUN in PATH")
 
     parser.add_argument("--eval_steps", type = int, help="Number of evaluation steps")
-    parser.add_argument("--netw_update_freq", type = int, help="Frequency of swapping main and target network")
+    parser.add_argument("--netw_update_freq", type = int, help="Frequency of updation of main network")
     parser.add_argument("--update_freq", type = int, help="Number of actions before gradient descent")
-    parser.add_argument("--memory_size", type = int, default = 1000000, help="Size of replay memory: Default 0.5 million")
+    parser.add_argument("--memory_size", type = int, default = 1000000, help="Size of replay memory: Default 1 million")
     parser.add_argument("--max_steps", type = int, default = 50000000, help="Total number of frames an agent sees")
     parser.add_argument("--train_steps", type = int, default = 50000000, help="Trained upto TRAIN_STEPS")
     parser.add_argument("--time_step", type = int, help="TIME_STEP corresponding to evaluation of model")
@@ -700,6 +716,7 @@ if __name__ == '__main__':
 
     TRAIN       = args.train
     SAVE        = args.save
+    LOAD        = args.load
     atari       = Atari(ENV_NAME, no_op_steps=NO_OP_STEPS, frameskip=FRAME_SKIP)
         
     # main DQN and target DQN networks:
@@ -733,7 +750,8 @@ if __name__ == '__main__':
     MEMORY_SIZE = args.memory_size
     MAX_STEPS   = args.max_steps
     TRAIN_STEPS = args.train_steps
-    if args.train:
+
+    if TRAIN:
         ### Need to save and load the model
         if args.path:
             PATH = args.path+f'/{GAME}-{FRAME_SKIP}'
@@ -744,15 +762,16 @@ if __name__ == '__main__':
         while os.path.exists(PATH + '/run_' + str(RUNID)):
             RUNID += 1
         
-        if args.load:
+        if LOAD:
             RUNID -= 1
 
-        RUNID     = '/run_' + str(RUNID)
-        PATH      = PATH + RUNID
-        os.makedirs(PATH, exist_ok=True)
+        PATH      = PATH + '/run_' + str(RUNID)
+        if TRAIN or LOAD:
+            os.makedirs(PATH, exist_ok=True)
+
         print(f'The env {ENV_NAME} has the following {atari.env.action_space.n} \
         actions: {atari.env.unwrapped.get_action_meanings()}')
-        train(args.load, PATH)
+        train()
     
     else:
         if args.time_step:
@@ -761,4 +780,4 @@ if __name__ == '__main__':
             CHECKPOINT  = args.path + f'/my_model-{args.time_step}'
             eval_model(FRAME_SKIP, args.time_step, META_PATH, CHECKPOINT)
         else:
-            raise ValueError("Evaluation Model Not Specified")   
+            raise ValueError("Evaluation Model Not Specified")
