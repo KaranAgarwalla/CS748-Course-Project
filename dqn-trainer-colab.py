@@ -22,7 +22,8 @@ NETW_UPDATE_FREQ = None          # Number of time_steps between updating the tar
 DISCOUNT_FACTOR = 0.99           # gamma in the Bellman equation
 REPLAY_MEMORY_START_SIZE = 200000# Number of completely random timesteps, 
                                  # before the agent starts learning
-MAX_STEPS = 50000000             # Total number of frames the agent sees 
+MAX_STEPS = 50000000             # Total number of frames the agent sees
+TRAIN_STEPS = 50000000           # Total number of frames that the agent sees in current iterations
 MEMORY_SIZE = 500000             # Number of transitions stored in the replay memory
 NO_OP_STEPS = 10                 # Number of 'NOOP' or 'FIRE' actions at the beginning of an 
                                  # evaluation episode
@@ -35,7 +36,7 @@ TARGET_LEARNING_RATE = 0.00001   # Learning rate of target network
 LEARNING_RATE = 0.00025          # Set to 0.00025 for quicker results. 
 BS = 32                          # Batch size
 AGENT_HISTORY_LENGTH = 4         # Number of frames stacked together to create a state
-FRACTION_GPU = 0.4               # If running multiple instances on same GPU, reduce it to 0.4 else 1
+FRACTION_GPU = 0.95              # If running multiple instances on same GPU, reduce it to 0.4 else 1
 
 # OBJECT VARIABLES
 MAIN_DQN        = None
@@ -56,11 +57,13 @@ import argparse
 import random
 import gym
 import tensorflow.compat.v1 as tf
+tf.logging.set_verbosity(tf.logging.ERROR)
 tf.disable_v2_behavior()
 import numpy as np
 import imageio
 from skimage.transform import resize
 import warnings
+import pickle
 
 config = tf.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = FRACTION_GPU
@@ -316,7 +319,29 @@ class ReplayMemory(object):
             self.new_states[i] = self._get_state(idx)
         
         return np.transpose(self.states, axes=(0, 2, 3, 1)), self.actions[self.indices], self.rewards[self.indices], np.transpose(self.new_states, axes=(0, 2, 3, 1)), self.terminal_flags[self.indices]
-                
+    
+    def load(self, path):
+        """
+            Loads the Replay Memory State Variables from path
+        """
+        self.count          = pickle.load(open(PATH+'replay_count.p'), 'rb')
+        self.current        = pickle.load(open(PATH+'replay_current.p'), 'rb')
+        self.actions        = np.load(PATH+'replay_actions.npy')
+        self.rewards        = np.load(PATH+'replay_rewards.npy')
+        self.frames         = np.load(PATH+'replay_frames.npy')
+        self.terminal_flags = np.load(PATH+'replay_terminal_flags.npy')
+    
+    def save(self, path):
+        """
+            Saves the Replay Memory State Variables to path
+        """
+        pickle.dump(self.count, open(PATH+'/replay_count.p'), 'wb')
+        pickle.dump(self.current, open(PATH+'/replay_current.p'), 'wb')
+        np.save(PATH+'replay_actions.npy', self.actions)
+        np.save(PATH+'replay_rewards.npy', self.rewards)
+        np.save(PATH+'replay_frames.npy', self.frames)
+        np.save(PATH+'replay_terminal_flags.npy', self.terminal_flags)
+
 def learn(session, replay_memory, main_dqn, target_dqn, batch_size, gamma):
     """
     Args:
@@ -451,11 +476,14 @@ class Atari(object):
 def clip_reward(reward):
     return np.sign(reward)  
 
-def train():
+def train(LOAD, PATH):
     """Contains the training and evaluation loops"""
-    my_replay_memory = ReplayMemory(size=MEMORY_SIZE, batch_size=BS)   # (★)
+
+    my_replay_memory = ReplayMemory(size=MEMORY_SIZE, batch_size=BS)
+    if LOAD:
+        my_replay_memory.load(PATH)
+
     update_networks = TargetNetworkUpdater(MAIN_DQN_VARS, TARGET_DQN_VARS)
-    
     explore_exploit_sched = ExplorationExploitationScheduler(
         MAIN_DQN, atari.env.action_space.n, 
         replay_memory_start_size=REPLAY_MEMORY_START_SIZE, 
@@ -465,16 +493,29 @@ def train():
     reward_per_10 = PATH + '/rewards_every_10_episodes.dat'
     reward_eval_01= PATH + '/rewards_eval_every_episodes.dat'
     reward_eval   = PATH + '/rewards_eval.dat'
+
     with tf.Session(config=config) as sess:
-        sess.run(init)
-        
+
         time_step = 0
         episode_number = 0
         frame_number = 0
         rewards = []
-        loss_list = []
         
-        while time_step < MAX_STEPS:
+        if LOAD:
+            ### Load the values
+            checkpoint_file = tf.train.latest_checkpoint(PATH)
+            loader = tf.train.import_meta_graph(checkpoint_file + '.meta')
+            loader.restore(sess, checkpoint_file)
+            time_step = pickle.load(open(PATH+'train_time_step.p'), 'rb')
+            episode_number = pickle.load(open(PATH+'train_episode_number.p'), 'rb')
+            frame_number = pickle.load(open(PATH+'train_frame_number.p'), 'rb')
+            rewards = pickle.load(open(PATH+'train_rewards.p'), 'rb')
+        else:
+            sess.run(init)
+        
+        if time_step >= TRAIN_STEPS:
+            raise ValueError("Agent already trained upto this time_step")
+        while time_step < TRAIN_STEPS:
             
             ########################
             ####### Training #######
@@ -507,7 +548,6 @@ def train():
                     if time_step % UPDATE_FREQ == 0 and time_step > REPLAY_MEMORY_START_SIZE:
                         loss = learn(sess, my_replay_memory, MAIN_DQN, TARGET_DQN,
                                      BS, gamma = DISCOUNT_FACTOR) # (8★)
-                        loss_list.append(loss)
 
                     ## Update the Target Network
                     if time_step % NETW_UPDATE_FREQ == 0 and time_step > REPLAY_MEMORY_START_SIZE:
@@ -578,7 +618,57 @@ def train():
             
             frames_for_gif = []
             with open(reward_eval, 'a') as f:
-                print(time_step, frame_number, episode_number, np.mean(eval_rewards), file=reward_eval)
+                print(time_step, frame_number, episode_number, np.mean(eval_rewards), file=f)
+        
+        if LOAD:
+            saver.save(sess, PATH+'/my_model', global_step=time_step)
+            pickle.dump(time_step, open(PATH+'/train_time_step.p'), 'wb')
+            pickle.dump(episode_number, open(PATH+'/train_episode_number.p'), 'wb')
+            pickle.dump(frame_number, open(PATH+'/train_frame_number.p'), 'wb')
+            pickle.dump(rewards, open(PATH+'/train_rewards.p'), 'wb')
+    
+    if LOAD:
+        my_replay_memory.save(PATH)
+
+def eval_model(frameskip, time_step, meta_graph_path, checkpoint_path):
+    '''
+        frameskip: frameskip parameter
+        meta_graph_path: path to meta-file (e.g.: '/home/DQN/Enduro-20/run_1/my_model-30000000.meta')
+        checkpoint_path: path to checkpoint-file (e.g.: '/home/DQN/Enduro-20/run_1/my_model-30000000') 
+    '''
+    gif_path = "/home/karan1agarwalla/GIF/"
+    os.makedirs(gif_path, exist_ok=True)
+
+    explore_exploit_sched = ExplorationExploitationScheduler(
+        MAIN_DQN, atari.env.action_space.n, 
+        replay_memory_start_size=REPLAY_MEMORY_START_SIZE, 
+        max_steps=MAX_STEPS)
+    
+    with tf.Session(config=config) as sess:
+
+        ### Restore Model
+        saver = tf.train.import_meta_graph(meta_graph_path)
+        saver.restore(sess, checkpoint_path)
+
+        frames_for_gif = []
+        terminal_life_lost = atari.reset(sess, evaluation = True)
+        episode_reward_sum = 0
+        while len(frames_for_gif) < EVAL_STEPS:
+            # atari.env.render()
+            action = 1 if terminal_life_lost else explore_exploit_sched.get_action(sess, 0, atari.state,  
+                                                                                evaluation = True)
+            
+            processed_new_frame, reward, terminal, terminal_life_lost, new_frame = atari.step(sess, action)
+            episode_reward_sum += reward
+            frames_for_gif.append(new_frame)
+            if terminal == True:
+                break
+        
+        # atari.env.close()
+        print("The total reward is {}".format(episode_reward_sum))
+        print("Creating gif...")
+        generate_gif(time_step, frames_for_gif, episode_reward_sum, gif_path)
+        print(f'Gif created, check the folder /home/karan1agarwalla/GIFS/{GAME}_{FRAME_SKIP}_{time_step}')
 
 if __name__ == '__main__':
     # Setup Parser
@@ -586,35 +676,35 @@ if __name__ == '__main__':
     parser.add_argument("--game", default = "Pong", help="Name of Atari Game")
     parser.add_argument("--version", default = 4, type = int, help="Version")
     parser.add_argument("--frameskip", default = 1, type = int, help="frameskip value")
+
     parser.add_argument("--train", action='store_true', help='Train vs Test')
-    parser.add_argument("--save", action='store_true', help='Train vs Test')
+    parser.add_argument("--save", action='store_true', help='Save Models and Results')
+    parser.add_argument("--load", action='store_true', help="Load Model in last run_id in PATH")
+
     parser.add_argument("--eval_steps", type = int, help="Number of evaluation steps")
     parser.add_argument("--netw_update_freq", type = int, help="Frequency of swapping main and target network")
     parser.add_argument("--update_freq", type = int, help="Number of actions before gradient descent")
-    parser.add_argument("--replay_memory_size", type = int, help="Size of replay memory: Default 0.5 million")
-    parser.add_argument("--max_steps", type = int, help="Total number of frames an agent sees")
+    parser.add_argument("--memory_size", type = int, default = 1000000, help="Size of replay memory: Default 0.5 million")
+    parser.add_argument("--max_steps", type = int, default = 50000000, help="Total number of frames an agent sees")
+    parser.add_argument("--train_steps", type = int, default = 50000000, help="Trained upto TRAIN_STEPS")
+    parser.add_argument("--time_step", type = int, help="TIME_STEP corresponding to evaluation of model")
     parser.add_argument("--path", help="Path to store models and values: PATH/'GAME'-'FRAMESKIP'/run_'RUN_ID'/")
-    parser.add_argument("--warnings", action='store_false', help='Display Deprecated Warnings')
-    
-    args = parser.parse_args()
-    if args.warnings:
-        warnings.filterwarnings("ignore", category=DeprecationWarning)
-        tf.logging.set_verbosity(tf.logging.ERROR)
 
     tf.reset_default_graph()
-    
+    args = parser.parse_args()
     GAME        = args.game
     ENV_NAME    = f'{args.game}Deterministic-v{args.version}'
     FRAME_SKIP  = args.frameskip
+
     TRAIN       = args.train
     SAVE        = args.save
     atari       = Atari(ENV_NAME, no_op_steps=NO_OP_STEPS, frameskip=FRAME_SKIP)
         
     # main DQN and target DQN networks:
     with tf.variable_scope('mainDQN'):
-        MAIN_DQN = DQN(atari.env.action_space.n, HIDDEN, LEARNING_RATE)   # (★★)
+        MAIN_DQN = DQN(atari.env.action_space.n, HIDDEN, LEARNING_RATE)
     with tf.variable_scope('targetDQN'):
-        TARGET_DQN = DQN(atari.env.action_space.n, HIDDEN, TARGET_LEARNING_RATE)                # (★★)
+        TARGET_DQN = DQN(atari.env.action_space.n, HIDDEN, TARGET_LEARNING_RATE)
 
     init = tf.global_variables_initializer()
     saver = tf.train.Saver(max_to_keep=100000)    
@@ -634,29 +724,39 @@ if __name__ == '__main__':
         UPDATE_FREQ = max(FRAME_SKIP, 16)
     
     if args.eval_steps:
-        EVAL_STEPS = arga.eval_steps
+        EVAL_STEPS = args.eval_steps
     else:
         EVAL_STEPS  = int(MAX_EPISODE_LENGTH/FRAME_SKIP)
 
-    if args.replay_memory_size:
-        MEMORY_SIZE = args.replay_memory_size
+    MEMORY_SIZE = args.memory_size
+    MAX_STEPS   = args.max_steps
+    
+    if args.train:
+        ### Need to save and load the model
+        if args.path:
+            PATH = args.path+f'/{GAME}-{FRAME_SKIP}'
+        else:
+            PATH = f'/content/drive/MyDrive/DQN-Train/{GAME}-{FRAME_SKIP}' 
+        ### Fetch RUNID
+        RUNID = 1
+        while os.path.exists(PATH + '/run_' + str(RUNID)):
+            RUNID += 1
+        
+        if args.load:
+            RUNID -= 1
 
-    if args.max_steps:
-        MAX_STEPS = args.max_steps
-
-    if args.path:
-        PATH = args.path+f'/{GAME}-{FRAME_SKIP}'
+        RUNID     = '/run_' + str(RUNID)
+        PATH      = PATH + RUNID
+        os.makedirs(PATH, exist_ok=True)
+        print(f'The env {ENV_NAME} has the following {atari.env.action_space.n} \
+        actions: {atari.env.unwrapped.get_action_meanings()}')
+        train(args.load, PATH)
+    
     else:
-        PATH      = f'/content/drive/MyDrive/DQN-Train/{GAME}-{FRAME_SKIP}' # Gifs and checkpoints will be saved here
-    SUMMARIES = 'summaries'                # logdir for tensorboard
-    RUNID     = 1
-    while os.path.exists(PATH + '/run_' + str(RUNID)):
-        RUNID += 1
-    RUNID     = '/run_' + str(RUNID)
-    PATH      = PATH + RUNID
-    SUMMARIES = PATH + '/' + SUMMARIES
-    os.makedirs(SUMMARIES, exist_ok=True)
-    print(f'The env {ENV_NAME} has the following {atari.env.action_space.n} \
-    actions: {atari.env.unwrapped.get_action_meanings()}')
-    if TRAIN:
-        train()    
+        if args.time_step:
+            print(f'Proceeding with Evaluation of Model with time step {args.time_step}')
+            META_PATH   = args.path + f'/my_model-{args.time_step}.meta'
+            CHECKPOINT  = args.path + f'/my_model-{args.time_step}'
+            eval_model(FRAME_SKIP, args.time_step, META_PATH, CHECKPOINT)
+        else:
+            raise ValueError("Evaluation Model Not Specified")   

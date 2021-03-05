@@ -577,7 +577,7 @@ def train():
             
             frames_for_gif = []
             with open(reward_eval, 'a') as f:
-                print(time_step, frame_number, episode_number, np.mean(eval_rewards), file=reward_eval)
+                print(time_step, frame_number, episode_number, np.mean(eval_rewards), file=f)
 
 if __name__ == '__main__':
     # Setup Parser
@@ -633,7 +633,7 @@ if __name__ == '__main__':
         UPDATE_FREQ = max(FRAME_SKIP, 16)
     
     if args.eval_steps:
-        EVAL_STEPS = arga.eval_steps
+        EVAL_STEPS = args.eval_steps
     else:
         EVAL_STEPS  = int(MAX_EPISODE_LENGTH/FRAME_SKIP)
 
