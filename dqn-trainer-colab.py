@@ -230,8 +230,8 @@ class ExplorationExploitationScheduler(object):
         else:
             eps = self.eps_final_step
 
-        if np.random.rand(1) < eps:
-            return np.random.randint(0, self.n_actions)
+        if random.random() < eps:
+            return random.randint(0, self.n_actions)
         return session.run(self.DQN.best_action, feed_dict={self.DQN.input:[state]})[0]  
 
 class ReplayMemory(object):
@@ -690,8 +690,10 @@ if __name__ == '__main__':
     parser.add_argument("--time_step", type = int, help="TIME_STEP corresponding to evaluation of model")
     parser.add_argument("--path", help="Path to store models and values: PATH/'GAME'-'FRAMESKIP'/run_'RUN_ID'/")
 
-    tf.reset_default_graph()
+    random.seed(0)
     args = parser.parse_args()
+    tf.reset_default_graph()
+
     GAME        = args.game
     ENV_NAME    = f'{args.game}Deterministic-v{args.version}'
     FRAME_SKIP  = args.frameskip
