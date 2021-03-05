@@ -231,7 +231,7 @@ class ExplorationExploitationScheduler(object):
             eps = self.eps_final_step
 
         if random.random() < eps:
-            return random.randint(0, self.n_actions)
+            return random.randrange(0, self.n_actions)
         return session.run(self.DQN.best_action, feed_dict={self.DQN.input:[state]})[0]  
 
 class ReplayMemory(object):
