@@ -638,10 +638,10 @@ def train():
         
         if SAVE:
             saver.save(sess, PATH+'/my_model', global_step=time_step)
-            pickle.dump(time_step, open(PATH+'/train_time_step.p'), 'wb')
-            pickle.dump(episode_number, open(PATH+'/train_episode_number.p'), 'wb')
-            pickle.dump(frame_number, open(PATH+'/train_frame_number.p'), 'wb')
-            pickle.dump(rewards, open(PATH+'/train_rewards.p'), 'wb')
+            pickle.dump(time_step, open(PATH+'/train_time_step.p', 'wb'))
+            pickle.dump(episode_number, open(PATH+'/train_episode_number.p', 'wb'))
+            pickle.dump(frame_number, open(PATH+'/train_frame_number.p', 'wb'))
+            pickle.dump(rewards, open(PATH+'/train_rewards.p', 'wb'))
     
     if SAVE:
         my_replay_memory.save_replay(PATH)
