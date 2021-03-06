@@ -331,10 +331,10 @@ class ReplayMemory(object):
         try:
             self.count          = pickle.load(open(PATH+'/replay_count.p', 'rb'))
             self.current        = pickle.load(open(PATH+'/replay_current.p', 'rb'))
-            self.actions        = np.load(PATH+'replay_actions.npy')
-            self.rewards        = np.load(PATH+'replay_rewards.npy')
-            self.frames         = np.load(PATH+'replay_frames.npy')
-            self.terminal_flags = np.load(PATH+'replay_terminal_flags.npy')
+            self.actions        = np.load(PATH+'/replay_actions.npy')
+            self.rewards        = np.load(PATH+'/replay_rewards.npy')
+            self.frames         = np.load(PATH+'/replay_frames.npy')
+            self.terminal_flags = np.load(PATH+'/replay_terminal_flags.npy')
         except:
             raise FileNotFoundError("Files for Replay Memory State do not exist")
 
@@ -344,10 +344,10 @@ class ReplayMemory(object):
         """
         pickle.dump(self.count, open(PATH+'/replay_count.p', 'wb'))
         pickle.dump(self.current, open(PATH+'/replay_current.p', 'wb'))
-        np.save(PATH+'replay_actions.npy', self.actions)
-        np.save(PATH+'replay_rewards.npy', self.rewards)
-        np.save(PATH+'replay_frames.npy', self.frames)
-        np.save(PATH+'replay_terminal_flags.npy', self.terminal_flags)
+        np.save(PATH+'/replay_actions.npy', self.actions)
+        np.save(PATH+'/replay_rewards.npy', self.rewards)
+        np.save(PATH+'/replay_frames.npy', self.frames)
+        np.save(PATH+'/replay_terminal_flags.npy', self.terminal_flags)
 
 def learn(session, replay_memory, main_dqn, target_dqn, batch_size, gamma):
     """
