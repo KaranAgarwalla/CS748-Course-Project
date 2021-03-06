@@ -513,10 +513,10 @@ def train():
             checkpoint_file = tf.train.latest_checkpoint(PATH)
             loader = tf.train.import_meta_graph(checkpoint_file + '.meta')
             loader.restore(sess, checkpoint_file)
-            time_step = pickle.load(open(PATH+'/train_time_step.p'), 'rb')
-            episode_number = pickle.load(open(PATH+'/train_episode_number.p'), 'rb')
-            frame_number = pickle.load(open(PATH+'/train_frame_number.p'), 'rb')
-            rewards = pickle.load(open(PATH+'/train_rewards.p'), 'rb')
+            time_step = pickle.load(open(PATH+'/train_time_step.p', 'rb'))
+            episode_number = pickle.load(open(PATH+'/train_episode_number.p', 'rb'))
+            frame_number = pickle.load(open(PATH+'/train_frame_number.p', 'rb'))
+            rewards = pickle.load(open(PATH+'/train_rewards.p', 'rb'))
         else:
             sess.run(init)
         
