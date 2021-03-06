@@ -329,8 +329,8 @@ class ReplayMemory(object):
             Loads the Replay Memory State Variables from path
         """
         try:
-            self.count          = pickle.load(open(PATH+'replay_count.p', 'rb'))
-            self.current        = pickle.load(open(PATH+'replay_current.p', 'rb'))
+            self.count          = pickle.load(open(PATH+'/replay_count.p', 'rb'))
+            self.current        = pickle.load(open(PATH+'/replay_current.p', 'rb'))
             self.actions        = np.load(PATH+'replay_actions.npy')
             self.rewards        = np.load(PATH+'replay_rewards.npy')
             self.frames         = np.load(PATH+'replay_frames.npy')
@@ -513,10 +513,10 @@ def train():
             checkpoint_file = tf.train.latest_checkpoint(PATH)
             loader = tf.train.import_meta_graph(checkpoint_file + '.meta')
             loader.restore(sess, checkpoint_file)
-            time_step = pickle.load(open(PATH+'train_time_step.p'), 'rb')
-            episode_number = pickle.load(open(PATH+'train_episode_number.p'), 'rb')
-            frame_number = pickle.load(open(PATH+'train_frame_number.p'), 'rb')
-            rewards = pickle.load(open(PATH+'train_rewards.p'), 'rb')
+            time_step = pickle.load(open(PATH+'/train_time_step.p'), 'rb')
+            episode_number = pickle.load(open(PATH+'/train_episode_number.p'), 'rb')
+            frame_number = pickle.load(open(PATH+'/train_frame_number.p'), 'rb')
+            rewards = pickle.load(open(PATH+'/train_rewards.p'), 'rb')
         else:
             sess.run(init)
         
