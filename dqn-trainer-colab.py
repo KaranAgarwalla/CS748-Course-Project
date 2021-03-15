@@ -703,6 +703,7 @@ if __name__ == '__main__':
     parser.add_argument("--memory_size", type = int, default = 1000000, help="Size of replay memory: Default 1 million")
     parser.add_argument("--max_steps", type = int, default = 50000000, help="Total number of frames an agent sees")
     parser.add_argument("--train_steps", type = int, default = 50000000, help="Trained upto TRAIN_STEPS")
+    parser.add_argument("--gamma", type = float, default = 0.99, help = "Discount Factor")
     parser.add_argument("--time_step", type = int, help="TIME_STEP corresponding to evaluation of model")
     parser.add_argument("--path", help="Path to store models and values: PATH/'GAME'-'FRAMESKIP'/run_'RUN_ID'/")
 
@@ -750,13 +751,14 @@ if __name__ == '__main__':
     MEMORY_SIZE = args.memory_size
     MAX_STEPS   = args.max_steps
     TRAIN_STEPS = args.train_steps
+    DISCOUNT_FACTOR = args.gamma
 
     if TRAIN:
         ### Need to save and load the model
         if args.path:
             PATH = args.path+f'/{GAME}-{FRAME_SKIP}'
         else:
-            PATH = f'/content/drive/MyDrive/DQN-Train/{GAME}-{FRAME_SKIP}' 
+            PATH = f'/content/drive/MyDrive/DQN-Train/{GAME}-{FRAME_SKIP}/GAMMA-{DISCOUNT_FACTOR}' 
         ### Fetch RUNID
         RUNID = 1
         while os.path.exists(PATH + '/run_' + str(RUNID)):
