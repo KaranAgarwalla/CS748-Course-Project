@@ -756,7 +756,7 @@ if __name__ == '__main__':
     if TRAIN:
         ### Need to save and load the model
         if args.path:
-            PATH = args.path+f'/{GAME}-{FRAME_SKIP}'
+            PATH = args.path+f'/{GAME}-{FRAME_SKIP}/GAMMA-{DISCOUNT_FACTOR}'
         else:
             PATH = f'/content/drive/MyDrive/DQN-Train/{GAME}-{FRAME_SKIP}/GAMMA-{DISCOUNT_FACTOR}' 
         ### Fetch RUNID
