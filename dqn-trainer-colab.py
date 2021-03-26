@@ -1,7 +1,6 @@
 # %%writefile dqn-train.py
 # To run this file, use normal command in the cell below like 
 # python3 dqn-train.py --game PongDeterminstic --frameskip 1 --train
-
 #Train a DQN Agent to play a specific game
 
 #CONSTANTS
@@ -17,7 +16,7 @@ FRAME_SKIP      = None           # Count of frame-skip value; FRAME_SKIP = 1 mea
 #CONTROL PARAMETERS
 MAX_EPISODE_LENGTH = 72000       # Equivalent of 20 minutes of gameplay at 60 frames per second
 SAVE_FREQUENCY = None            # Model saved after every SAVE_FREQUENCY timesteps
-EVAL_FREQUENCY = 800000          # Number of time_steps between evaluations
+EVAL_FREQUENCY = 1000000         # Number of time_steps between evaluations
 EVAL_STEPS = None                # Number of frames for one evaluation
 NETW_UPDATE_FREQ = None          # Number of time_steps between updating the target network. 
                                  # set to min(10000*FRAME_SKIP, 160000)
@@ -38,7 +37,8 @@ TARGET_LEARNING_RATE = 0.00001   # Learning rate of target network
 LEARNING_RATE = 0.00025          # Set to 0.00025 for quicker results. 
 BS = 32                          # Batch size
 AGENT_HISTORY_LENGTH = 4         # Number of frames stacked together to create a state
-FRACTION_GPU = 0.95              # If running multiple instances on same GPU, reduce it to 0.4 else 1
+# FRACTION_GPU = 0.95            # If running multiple instances on same GPU, reduce it to 0.45 (for 2) else 1
+RANDOM_SEED = 0                  # Random seed for initialisation
 
 # OBJECT VARIABLES
 MAIN_DQN        = None
@@ -68,9 +68,11 @@ import numpy as np
 import imageio
 from skimage.transform import resize
 import pickle
+os.environ['TF_CUDNN_DETERMINISTIC']='1'
+os.environ['TF_DETERMINISTIC_OPS'] = '1'
 
-config = tf.ConfigProto()
-config.gpu_options.per_process_gpu_memory_fraction = FRACTION_GPU
+# config = tf.ConfigProto()
+# config.gpu_options.per_process_gpu_memory_fraction = FRACTION_GPU
 
 class FrameProcessor:
     """Resizes and converts RGB Atari frames to grayscale"""
@@ -432,6 +434,8 @@ class Atari:
     """Wrapper for the environment provided by gym"""
     def __init__(self, envName, no_op_steps, agent_history_length, frameskip):
         self.env = gym.make(envName, frameskip=frameskip)
+        self.env.seed(RANDOM_SEED)
+        self.env.action_space.seed(RANDOM_SEED)
         self.process_frame = FrameProcessor()
         self.state = None
         self.last_lives = 0
@@ -485,12 +489,15 @@ def clip_reward(reward):
 
 def train():
     """Contains the training and evaluation loops"""
-
+    
+    if SAVE:
+        print(f'***Save option turned on: Filed would be saved in {PATH}***')
+        print("***If you don't see the message 'All files saved' run cleaner.py***")
     my_replay_memory = ReplayMemory(size=MEMORY_SIZE, batch_size=BS, \
                         agent_history_length=AGENT_HISTORY_LENGTH)
     if LOAD:
         my_replay_memory.load_replay(PATH)
-
+        print("Replay Memory Loaded")
     update_networks = TargetNetworkUpdater(MAIN_DQN_VARS, TARGET_DQN_VARS)
     explore_exploit_sched = ExplorationExploitationScheduler(
         MAIN_DQN, atari.env.action_space.n, 
@@ -502,7 +509,8 @@ def train():
     reward_eval_01= os.path.join(PATH, 'rewards_eval_every_episodes.dat')
     reward_eval   = os.path.join(PATH, 'rewards_eval.dat')
 
-    with tf.Session(config=config) as sess:
+    # with tf.Session(config=config) as sess:
+    with tf.Session() as sess:
 
         time_step = 0
         episode_number = 0
@@ -565,7 +573,6 @@ def train():
                     ## Save the network parameters
                     if SAVE and time_step % SAVE_FREQUENCY == 0:
                         saver.save(sess, os.path.join(PATH, 'my_model'), global_step=time_step)
-        
                     if terminal:
                         terminal = False
                         break
@@ -636,16 +643,19 @@ def train():
             if SAVE:
                 with open(reward_eval, 'a') as f:
                     print(time_step, frame_number, episode_number, np.mean(eval_rewards), file=f)
-        
+
+        print(f'Training Done till {time_step}')
         if SAVE:
+            print("***Saving training parameters: In case you don't see Saved! run the training procedure from start***")
             saver.save(sess, os.path.join(PATH, 'my_model'), global_step=time_step)
             pickle.dump(time_step, open(os.path.join(PATH, 'train_time_step.p'), 'wb'))
             pickle.dump(episode_number, open(os.path.join(PATH, 'train_episode_number.p'), 'wb'))
             pickle.dump(frame_number, open(os.path.join(PATH, 'train_frame_number.p'), 'wb'))
             pickle.dump(rewards, open(os.path.join(PATH, 'train_rewards.p'), 'wb'))
-    
     if SAVE:
         my_replay_memory.save_replay(PATH)
+        print("***!Saved***")
+        print("All files saved")
 
 def eval_model(frameskip, gif_path, time_step, meta_graph_path, checkpoint_path):
     '''
@@ -659,8 +669,9 @@ def eval_model(frameskip, gif_path, time_step, meta_graph_path, checkpoint_path)
         MAIN_DQN, atari.env.action_space.n, 
         replay_memory_start_size=REPLAY_MEMORY_START_SIZE, 
         max_steps=MAX_STEPS)
-    
-    with tf.Session(config=config) as sess:
+
+    # with tf.Session(config=config) as sess:    
+    with tf.Session() as sess:
 
         ### Restore Model
         saver = tf.train.import_meta_graph(meta_graph_path)
@@ -698,27 +709,31 @@ if __name__ == '__main__':
 
     parser.add_argument("--train", action='store_true', help='Train vs Evaluate')
     parser.add_argument("--save", action='store_true', help='Save Models and Results')
-    parser.add_argument("--save_frequency", type=int, default=400000, help="Save Frequency")
+    parser.add_argument("--save_frequency", type=int, default=100000, help="Save Frequency")
     parser.add_argument("--load", action='store_true', help="Load Model in last RUN in PATH")
 
     parser.add_argument("--eval_steps", type = int, help="Number of evaluation steps")
     parser.add_argument("--netw_update_freq", type = int, help="Frequency of updation of main network")
     parser.add_argument("--update_freq", type = int, help="Number of actions before gradient descent")
-    parser.add_argument("--memory_size", type = int, default = 1000000, help="Size of replay memory: Default 1 million")
-    parser.add_argument("--max_steps", type = int, default = 50000000, help="Total number of frames an agent sees")
+    parser.add_argument("--memory_size", type = int, default=1000000, help="Size of replay memory: Default 1 million")
+    parser.add_argument("--max_steps", type = int, default=100000000, help="Total number of frames an agent sees")
     parser.add_argument("--train_steps", type = int, default = 50000000, help="Trained upto TRAIN_STEPS")
     parser.add_argument("--gamma", type = float, default = 0.99, help = "Discount Factor")
     parser.add_argument("--time_step", type = int, help="TIME_STEP corresponding to evaluation of model")
     parser.add_argument("--path", help="Path to store models and values: PATH/'GAME'-'FRAMESKIP'/run_'RUN_ID'/")
-
-    random.seed(0)
+    parser.add_argument("--seed", type=int, default=0, help="Random seed to execute code on")
+    
     args = parser.parse_args()
     tf.reset_default_graph()
+    RANDOM_SEED = args.seed
+    tf.set_random_seed(RANDOM_SEED)
+    random.seed(RANDOM_SEED)
+    np.random.seed(RANDOM_SEED)
 
     GAME        = args.game
     ENV_NAME    = f'{args.game}Deterministic-v{args.version}'
     FRAME_SKIP  = args.frameskip
-
+    
     TRAIN       = args.train
     SAVE        = args.save
     SAVE_FREQUENCY = args.save_frequency
@@ -741,8 +756,10 @@ if __name__ == '__main__':
     # update frequencies of the target and main networks
     if args.netw_update_freq:
         NETW_UPDATE_FREQ = args.netw_update_freq
+    elif FRAME_SKIP<=4:
+        NETW_UPDATE_FREQ = 10000*FRAME_SKIP
     else:
-        NETW_UPDATE_FREQ = min(10000*FRAME_SKIP, 160000)
+        NETW_UPDATE_FREQ = 5000*FRAME_SKIP
     
     if args.update_freq:
         UPDATE_FREQ = args.update_freq
