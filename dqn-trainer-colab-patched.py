@@ -582,14 +582,14 @@ def train():
                 
                 if SAVE:
                     with open(reward_per_01, 'a') as f:
-                        print(len(rewards), time_step, frame_number, episode_number, episode_reward_sum, file = f)
+                        print(time_step, frame_number, episode_number, episode_reward_sum, file = f)
                 
                 # Output the progress:
                 if len(rewards) % 10 == 0:
                     print(len(rewards), time_step, np.mean(rewards[-100:]))
                     if SAVE:
                         with open(reward_per_10, 'a') as f:
-                            print(len(rewards), time_step, frame_number, episode_number,
+                            print(time_step, frame_number, episode_number,
                                 np.mean(rewards[-10:]), file=f)
             
             ########################
