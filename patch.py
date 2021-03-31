@@ -13,7 +13,7 @@ def patch(reward_file):
 if __name__ == '__main__':
     # Setup Parser
     parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--path", help="Path to patch PATH/'GAME'-'FRAMESKIP'/run_'RUN_ID'/")
+    parser.add_argument("--path", help="Path to patch PATH/'GAME'-'FRAMESKIP'/GAMMA-'GAMMA'/run_'RUN_ID'/")
     
     args = parser.parse_args()
     PATH = args.path

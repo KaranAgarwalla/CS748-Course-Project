@@ -720,7 +720,7 @@ if __name__ == '__main__':
     parser.add_argument("--train_steps", type = int, default = 50000000, help="Trained upto TRAIN_STEPS")
     parser.add_argument("--gamma", type = float, default = 0.99, help = "Discount Factor")
     parser.add_argument("--time_step", type = int, help="TIME_STEP corresponding to evaluation of model")
-    parser.add_argument("--path", help="Path to store models and values: PATH/'GAME'-'FRAMESKIP'/run_'RUN_ID'/")
+    parser.add_argument("--path", help="Path to store models and values: PATH/'GAME'-'FRAMESKIP'/GAMMA-'GAMMA'/run_'RUN_ID'/")
     parser.add_argument("--seed", type=int, default=0, help="Random seed to execute code on")
     
     args = parser.parse_args()
