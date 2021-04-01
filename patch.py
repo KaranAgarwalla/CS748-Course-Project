@@ -7,6 +7,8 @@ def patch(reward_file):
         raise FileNotFoundError(f'Following file not found: {reward_file}')
     
     reward_data = np.loadtxt(reward_file)
+    if reward_data.shape[1] != 5:
+        raise ValueError(f'Files are already patched!')
     reward_data = np.delete(reward_data, 0, 1)
     np.savetxt(reward_file, reward_data, fmt='%d %d %d %.2f')
 

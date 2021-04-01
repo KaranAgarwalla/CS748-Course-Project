@@ -6,15 +6,6 @@ import re
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 
-# with open(reward_eval_01, 'a') as f:
-#     print(time_step, frame_number, episode_number, episode_reward_sum, file = f)
-# with open(reward_eval, 'a') as f:
-#     print(time_step, frame_number, episode_number, np.mean(eval_rewards), file=f)
-# with open(reward_per_10, 'a') as f:
-#     print(len(rewards), time_step, frame_number, episode_number, np.mean(rewards[-10:]), file=f)
-# with open(reward_per_01, 'a') as f:
-#     print(len(rewards), time_step, frame_number, episode_number, episode_reward_sum, file = f)
-
 def clean(reward_file, time_step, frame_number, episode_number):
     if not os.path.exists(reward_file):
         raise FileNotFoundError(f'''Following file not found: {reward_file}; 
