@@ -38,7 +38,6 @@ LEARNING_RATE = 0.00025          # Set to 0.00025 for quicker results.
 BS = 32                          # Batch size
 AGENT_HISTORY_LENGTH = 4         # Number of frames stacked together to create a state
 # FRACTION_GPU = 0.95            # If running multiple instances on same GPU, reduce it to 0.45 (for 2) else 1
-RANDOM_SEED = 0                  # Random seed for initialisation
 
 # OBJECT VARIABLES
 MAIN_DQN        = None
@@ -434,8 +433,6 @@ class Atari:
     """Wrapper for the environment provided by gym"""
     def __init__(self, envName, no_op_steps, agent_history_length, frameskip):
         self.env = gym.make(envName, frameskip=frameskip)
-        self.env.seed(RANDOM_SEED)
-        self.env.action_space.seed(RANDOM_SEED)
         self.process_frame = FrameProcessor()
         self.state = None
         self.last_lives = 0
@@ -486,6 +483,13 @@ class Atari:
 
 def clip_reward(reward):
     return np.sign(reward)  
+
+def set_seed(random_seed, atari_obj):
+    tf.set_random_seed(random_seed)
+    random.seed(random_seed)
+    np.random.seed(random_seed)
+    self.env.seed(random_seed)
+    self.env.action_space.seed(random_seed)
 
 def train():
     """Contains the training and evaluation loops"""
@@ -540,6 +544,7 @@ def train():
 
             epoch_steps = 0
             while epoch_steps < EVAL_FREQUENCY:
+                set_seed(episode_number, atari)
                 terminal_life_lost = atari.reset(sess)
                 episode_reward_sum = 0
                 episode_iter = 0
@@ -582,14 +587,14 @@ def train():
                 
                 if SAVE:
                     with open(reward_per_01, 'a') as f:
-                        print(len(rewards), time_step, frame_number, episode_number, episode_reward_sum, file = f)
+                        print(time_step, frame_number, episode_number, episode_reward_sum, file = f)
                 
                 # Output the progress:
                 if len(rewards) % 10 == 0:
                     print(len(rewards), time_step, np.mean(rewards[-100:]))
                     if SAVE:
                         with open(reward_per_10, 'a') as f:
-                            print(len(rewards), time_step, frame_number, episode_number,
+                            print(time_step, frame_number, episode_number,
                                 np.mean(rewards[-10:]), file=f)
             
             ########################
@@ -726,9 +731,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     tf.reset_default_graph()
     RANDOM_SEED = args.seed
-    tf.set_random_seed(RANDOM_SEED)
-    random.seed(RANDOM_SEED)
-    np.random.seed(RANDOM_SEED)
 
     GAME        = args.game
     ENV_NAME    = f'{args.game}Deterministic-v{args.version}'
