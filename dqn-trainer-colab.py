@@ -433,6 +433,8 @@ class Atari:
     """Wrapper for the environment provided by gym"""
     def __init__(self, envName, no_op_steps, agent_history_length, frameskip):
         self.env = gym.make(envName, frameskip=frameskip)
+        self.env.seed(0)
+        self.env.action_space.seed(0)
         self.process_frame = FrameProcessor()
         self.state = None
         self.last_lives = 0
@@ -484,12 +486,10 @@ class Atari:
 def clip_reward(reward):
     return np.sign(reward)  
 
-def set_seed(random_seed, atari_obj):
+def set_seed(random_seed):
     tf.set_random_seed(random_seed)
     random.seed(random_seed)
     np.random.seed(random_seed)
-    self.env.seed(random_seed)
-    self.env.action_space.seed(random_seed)
 
 def train():
     """Contains the training and evaluation loops"""
@@ -544,7 +544,7 @@ def train():
 
             epoch_steps = 0
             while epoch_steps < EVAL_FREQUENCY:
-                set_seed(episode_number, atari)
+                set_seed(episode_number)
                 terminal_life_lost = atari.reset(sess)
                 episode_reward_sum = 0
                 episode_iter = 0
@@ -726,7 +726,7 @@ if __name__ == '__main__':
     parser.add_argument("--gamma", type = float, default = 0.99, help = "Discount Factor")
     parser.add_argument("--time_step", type = int, help="TIME_STEP corresponding to evaluation of model")
     parser.add_argument("--path", help="Path to store models and values: PATH/'GAME'-'FRAMESKIP'/GAMMA-'GAMMA'/run_'RUN_ID'/")
-    parser.add_argument("--seed", type=int, default=0, help="Random seed to execute code on")
+    parser.add_argument("--seed", type=int, default=0, help="Random seed to evaluate model on")
     
     args = parser.parse_args()
     tf.reset_default_graph()
