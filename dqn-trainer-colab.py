@@ -520,7 +520,7 @@ def train():
 
     SEED_PATH = os.path.join(PATH, 'seed_offset.npy')
     if os.path.exists(SEED_PATH):
-        seed_arr = np.load(SEED_PATH)
+        seed_arr = pickle.load(SEED_PATH)
         if seed_arr[0] != SEED_OFFSET:
             raise ValueError(f'Training with an incorrect offset:{SEED_OFFSET} Correct Offset:{seed_arr[0]}')
     else:
