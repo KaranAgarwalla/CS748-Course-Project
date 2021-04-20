@@ -522,7 +522,7 @@ def train():
     if os.path.exists(SEED_PATH):
         seed_arr = np.load(SEED_PATH)
         if seed_arr[0] != SEED_OFFSET:
-            raise ValueError(f'Training with an incorrect offset:{SEED_OFFSET} Correct Offset:{seed_arr[0]')
+            raise ValueError(f'Training with an incorrect offset:{SEED_OFFSET} Correct Offset:{seed_arr[0]}')
     else:
         with open(SEED_PATH, 'a') as f:
             print(SEED_OFFSET, file=f)
