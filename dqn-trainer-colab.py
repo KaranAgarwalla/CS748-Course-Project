@@ -498,16 +498,15 @@ def set_seed(random_seed):
 
 def train():
     """Contains the training and evaluation loops"""
-    SEED_PATH = os.path.join(PATH, 'seed_offset.npy')
+    SEED_PATH = os.path.join(PATH, 'seed_offset.txt')
     if os.path.exists(SEED_PATH):
-        with open(SEED_PATH, 'rb') as f:
-            seed_arr = pickle.load(file=f)
+        seed_arr = np.loadtxt(SEED_PATH)
         if seed_arr[0] != SEED_OFFSET:
             raise ValueError(f'Training with an incorrect offset:{SEED_OFFSET} Correct Offset:{seed_arr[0]}')
     else:
         with open(SEED_PATH, 'a') as f:
             print(SEED_OFFSET, file=f)
-            
+
     if SAVE:
         print(f'***Save option turned on: Filed would be saved in {PATH}***')
         print("***If you don't see the message 'All files saved' run cleaner.py***")
