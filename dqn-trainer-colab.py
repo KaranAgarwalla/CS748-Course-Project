@@ -37,6 +37,7 @@ TARGET_LEARNING_RATE = 0.00001   # Learning rate of target network
 LEARNING_RATE = 0.00025          # Set to 0.00025 for quicker results. 
 BS = 32                          # Batch size
 AGENT_HISTORY_LENGTH = 4         # Number of frames stacked together to create a state
+SEED_OFFSET = None               # Offset of seed to get a few random runs
 # FRACTION_GPU = 0.95            # If running multiple instances on same GPU, reduce it to 0.45 (for 2) else 1
 
 # OBJECT VARIABLES
@@ -330,8 +331,10 @@ class ReplayMemory:
             Loads the Replay Memory State Variables from path
         """
         try:
-            self.count          = pickle.load(open(os.path.join(path, 'replay_count.p'), 'rb'))
-            self.current        = pickle.load(open(os.path.join(path, 'replay_current.p'), 'rb'))
+            with open(os.path.join(path, 'replay_count.p'), 'rb') as f:
+                self.count      = pickle.load(file=f)
+            with open(os.path.join(path, 'replay_current.p'), 'rb') as f:
+                self.current    = pickle.load(file=f)
             self.actions        = np.load(os.path.join(path, 'replay_actions.npy'))
             self.rewards        = np.load(os.path.join(path, 'replay_rewards.npy'))
             self.frames         = np.load(os.path.join(path, 'replay_frames.npy'))
@@ -343,8 +346,10 @@ class ReplayMemory:
         """
             Saves the Replay Memory State Variables to path 
         """
-        pickle.dump(self.count, open(os.path.join(path, 'replay_count.p'), 'wb'))
-        pickle.dump(self.current, open(os.path.join(path, 'replay_current.p'), 'wb'))
+        with open(os.path.join(path, 'replay_count.p'), 'wb') as f:
+            pickle.dump(self.count, file=f)
+        with open(os.path.join(path, 'replay_current.p'), 'wb') as f:
+            pickle.dump(self.current, file=f)
         np.save(os.path.join(path, 'replay_actions.npy'), self.actions)
         np.save(os.path.join(path, 'replay_rewards.npy'), self.rewards)
         np.save(os.path.join(path, 'replay_frames.npy'), self.frames)
@@ -513,6 +518,15 @@ def train():
     reward_eval_01= os.path.join(PATH, 'rewards_eval_every_episodes.dat')
     reward_eval   = os.path.join(PATH, 'rewards_eval.dat')
 
+    SEED_PATH = os.path.join(PATH, 'seed_offset.npy')
+    if os.path.exists(SEED_PATH):
+        seed_arr = np.load(SEED_PATH)
+        if seed_arr[0] != SEED_OFFSET:
+            raise ValueError(f'Training with an incorrect offset:{SEED_OFFSET} Correct Offset:{seed_arr[0]')
+    else:
+        with open(SEED_PATH, 'a') as f:
+            print(SEED_OFFSET, file=f)
+
     # with tf.Session(config=config) as sess:
     with tf.Session() as sess:
 
@@ -520,16 +534,20 @@ def train():
         episode_number = 0
         frame_number = 0
         rewards = []
-        
+
         if LOAD:
             ### Load the values
             checkpoint_file = tf.train.latest_checkpoint(PATH)
             loader = tf.train.import_meta_graph(checkpoint_file + '.meta')
             loader.restore(sess, checkpoint_file)
-            time_step = pickle.load(open(os.path.join(PATH, 'train_time_step.p'), 'rb'))
-            episode_number = pickle.load(open(os.path.join(PATH, 'train_episode_number.p'), 'rb'))
-            frame_number = pickle.load(open(os.path.join(PATH, 'train_frame_number.p'), 'rb'))
-            rewards = pickle.load(open(os.path.join(PATH, 'train_rewards.p'), 'rb'))
+            with open(os.path.join(PATH, 'train_time_step.p'), 'rb') as f:
+                time_step = pickle.load(file=f)
+            with open(os.path.join(PATH, 'train_episode_number.p'), 'rb') as f:
+                episode_number = pickle.load(file=f)
+            with open(os.path.join(PATH, 'train_frame_number.p'), 'rb') as f:
+                frame_number = pickle.load(file=f)
+            with open(os.path.join(PATH, 'train_rewards.p'), 'rb') as f:
+                rewards = pickle.load(file=f)
         else:
             sess.run(init)
         
@@ -544,7 +562,7 @@ def train():
 
             epoch_steps = 0
             while epoch_steps < EVAL_FREQUENCY:
-                set_seed(episode_number)
+                set_seed(episode_number + SEED_OFFSET)
                 terminal_life_lost = atari.reset(sess)
                 episode_reward_sum = 0
                 episode_iter = 0
@@ -653,10 +671,14 @@ def train():
         if SAVE:
             print("***Saving training parameters: In case you don't see Saved! run the training procedure from start***")
             saver.save(sess, os.path.join(PATH, 'my_model'), global_step=time_step)
-            pickle.dump(time_step, open(os.path.join(PATH, 'train_time_step.p'), 'wb'))
-            pickle.dump(episode_number, open(os.path.join(PATH, 'train_episode_number.p'), 'wb'))
-            pickle.dump(frame_number, open(os.path.join(PATH, 'train_frame_number.p'), 'wb'))
-            pickle.dump(rewards, open(os.path.join(PATH, 'train_rewards.p'), 'wb'))
+            with open(os.path.join(PATH, 'train_time_step.p'), 'wb') as f:
+                pickle.dump(time_step, file=f)
+            with open(os.path.join(PATH, 'train_episode_number.p'), 'wb') as f:
+                pickle.dump(episode_number, file=f)
+            with open(os.path.join(PATH, 'train_frame_number.p'), 'wb') as f:
+                pickle.dump(frame_number, file=f)
+            with open(os.path.join(PATH, 'train_rewards.p'), 'wb') as f:
+                pickle.dump(rewards, file=f)
     if SAVE:
         my_replay_memory.save_replay(PATH)
         print("***!Saved***")
@@ -724,7 +746,9 @@ if __name__ == '__main__':
     parser.add_argument("--max_steps", type = int, default=100000000, help="Total number of frames an agent sees")
     parser.add_argument("--train_steps", type = int, default = 50000000, help="Trained upto TRAIN_STEPS")
     parser.add_argument("--gamma", type = float, default = 0.99, help = "Discount Factor")
+    parser.add_argument("--offset", type=int, default = 0, help="Offset of seed to train the model on")
     parser.add_argument("--time_step", type = int, help="TIME_STEP corresponding to evaluation of model")
+    parser.add_argument("--run_id", type=int, help="RUN to be trained")
     parser.add_argument("--path", help="Path to store models and values: PATH/'GAME'-'FRAMESKIP'/GAMMA-'GAMMA'/run_'RUN_ID'/")
     parser.add_argument("--seed", type=int, default=0, help="Random seed to evaluate model on")
     
@@ -777,6 +801,7 @@ if __name__ == '__main__':
     MAX_STEPS   = args.max_steps
     TRAIN_STEPS = args.train_steps
     DISCOUNT_FACTOR = args.gamma
+    SEED_OFFSET = args.offset
 
     if TRAIN:
         print("***TRAINING***")
@@ -786,12 +811,15 @@ if __name__ == '__main__':
         else:
             PATH = f'/content/drive/MyDrive/DQN-Train/{GAME}-{FRAME_SKIP}/GAMMA-{DISCOUNT_FACTOR}' 
         ### Fetch RUNID
-        RUNID = 1
-        while os.path.exists(os.path.join(PATH, 'run_' + str(RUNID))):
-            RUNID += 1
-        
-        if LOAD:
-            RUNID -= 1
+        if args.run_id:
+            RUNID = args.run_id
+        else:
+            RUNID = 1
+            while os.path.exists(os.path.join(PATH, 'run_' + str(RUNID))):
+                RUNID += 1
+            
+            if LOAD:
+                RUNID -= 1
 
         PATH      = os.path.join(PATH, 'run_' + str(RUNID))
         if TRAIN or LOAD:
