@@ -836,6 +836,8 @@ if __name__ == '__main__':
 
     else:
         print(f'Proceeding with evaluation of all files in folder{args.path}')
+        if os.path.exists(os.path.join(args.path, 'evaluation.dat')):
+            raise ValueError('Partial Evaluation Done')
         for time_step in range(100000, 51000000, 100000):
             META_PATH   = os.path.join(args.path, f'my_model-{time_step}.meta')
             CHECKPOINT  = os.path.join(args.path, f'my_model-{time_step}')
